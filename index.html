@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Game Lab · Dad Camp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Martian+Mono:wght@400;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23ff6a1a' width='32' height='32' rx='6'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="lab.css?v=8" />
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <h1>GAME LAB</h1>
+        <div class="sub" id="dayTitle">Day 1 · Make it go</div>
+      </div>
+      <div class="day-pips" id="dayPips"></div>
+      <div class="meta">
+        <div class="names" id="nameLabel">Pieter + Cayden</div>
+        <div class="timer" id="timer">50:00</div>
+        <button class="ghost" id="timerBtn" type="button">Start hour</button>
+        <button class="ghost" id="resetDay" type="button">Start over</button>
+        <button class="ghost" id="saveGame" type="button">Save game</button>
+      </div>
+    </header>
+
+    <section class="lesson-bar">
+      <h2 id="lessonName">Make it go</h2>
+      <p id="lessonText"></p>
+      <div id="progressLabel">0 / 3</div>
+    </section>
+
+    <main class="stage">
+      <aside class="card">
+        <h3>To do</h3>
+        <div class="missions" id="missions"></div>
+        <p class="why" id="coach"></p>
+      </aside>
+
+      <section class="card editor-wrap">
+        <h3>Your instructions</h3>
+        <div class="palette" id="palette"></div>
+        <div class="speed-row hidden" id="speedRow">
+          <span>Speed</span>
+          <button type="button" class="chip-btn" id="slower">Slower</button>
+          <button type="button" class="chip-btn" id="faster">Faster</button>
+        </div>
+        <div class="helpers" id="helpers"></div>
+        <div class="codebox">
+          <pre class="gutter" id="gutter">1</pre>
+          <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+        </div>
+        <div class="editor-footer">
+          <div class="error" id="error"></div>
+          <button class="run-btn" id="run" type="button">PLAY</button>
+        </div>
+      </section>
+
+      <section class="card rink-card">
+        <h3>The rink</h3>
+        <div class="screen">
+          <canvas id="rink" width="560" height="380" tabindex="0"></canvas>
+          <div class="scan"></div>
+        </div>
+        <div class="controls">
+          <div class="keys">Click the rink, then use <kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd></div>
+          <div>Space shoots · WASD is player 2</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="overlay" id="gate">
+    <div class="modal">
+      <h2>Game Lab</h2>
+      <p>Five days. One hockey game. You write tiny instructions. The rink plays them.</p>
+      <div class="fields">
+        <div>
+          <label for="name1">Kid 1</label>
+          <input id="name1" value="Pieter" />
+        </div>
+        <div>
+          <label for="name2">Kid 2</label>
+          <input id="name2" value="Cayden" />
+        </div>
+      </div>
+      <button class="run-btn" id="enter" type="button">Start</button>
+    </div>
+  </div>
+
+  <canvas class="celebrate" id="celebrate"></canvas>
+
+  <script src="kidlang.js?v=9"></script>
+  <script src="engine.js?v=9"></script>
+  <script src="curriculum.js?v=9"></script>
+  <script src="app.js?v=9"></script>
+</body>
+</html>
