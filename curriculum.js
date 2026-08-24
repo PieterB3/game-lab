@@ -104,12 +104,13 @@
         {
           id: "puckcolor",
           title: "Paint the pucks",
-          why: "puck color gold changes how they look.",
-          hint: "Tap Gold pucks, then PLAY.",
+          why: "puck color gold changes how they look. Red, blue, or lime work too.",
+          hint: "Tap Gold pucks, or type puck color red. Then PLAY.",
           showMe: "puck color gold",
           check: function (code, snap) {
             var c = String(snap.game.puckColor || "").toLowerCase();
-            return c !== "" && c !== "black" && c !== "#111111";
+            if (c && c !== "black" && c !== "#111111") return true;
+            return /puck\s+color\s+\S+/i.test(code);
           }
         }
       ]

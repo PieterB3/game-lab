@@ -755,6 +755,7 @@
         lives: this.game.lives,
         winScore: this.game.winScore,
         coinCount: this.game.coinCount,
+        puckColor: this.game.puckColor,
         enemyCount: this.game.enemyCount,
         enemySpeed: this.game.enemySpeed,
         twoPlayer: this.game.twoPlayer,
