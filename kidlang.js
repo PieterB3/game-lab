@@ -21,8 +21,21 @@
       winSays: "YOU WIN",
       loseSays: "GAME OVER",
       shoot: false,
-      twoPlayers: false
+      twoPlayers: false,
+      world: "hockey",
+      dog: "",
+      growOnGrab: false,
+      roundTime: 0,
+      kingOn: false,
+      kingBones: 0
     };
+  }
+
+  function dogName(raw) {
+    var d = String(raw || "").toLowerCase();
+    if (d === "spot" || d === "spots") return "dalmatian";
+    if (d === "puppy" || d === "lab" || d === "retriever") return "golden";
+    return d;
   }
 
   function rest(line, prefix) {
@@ -66,6 +79,11 @@
         rules.shape = rest(low, "shape");
         continue;
       }
+      if (/^dog\s+/.test(low)) {
+        rules.dog = dogName(rest(low, "dog"));
+        rules.world = "dogs";
+        continue;
+      }
       if (low === "go right" || low === "move right") {
         rules.move.right = true;
         continue;
@@ -86,12 +104,34 @@
         rules.pucks = Number(low.replace(/[^\d]/g, ""));
         continue;
       }
+      if (/^bones\s+\d+/.test(low) || /^bone\s+\d+/.test(low)) {
+        rules.pucks = Number(low.replace(/[^\d]/g, ""));
+        rules.world = "dogs";
+        continue;
+      }
       if (/^puck color\s+/.test(low)) {
         rules.puckColor = rest(low, "puck color");
         continue;
       }
       if (low === "get puck = score" || low === "get puck" || low === "score pucks") {
         rules.scoreOnGrab = true;
+        continue;
+      }
+      if (low === "get bone = grow" || low === "get bone" || low === "get bones = grow") {
+        rules.scoreOnGrab = true;
+        rules.growOnGrab = true;
+        rules.world = "dogs";
+        continue;
+      }
+      if (/^time\s+\d+/.test(low)) {
+        rules.roundTime = Number(low.replace(/[^\d]/g, ""));
+        rules.world = "dogs";
+        continue;
+      }
+      if (/^king bones\s+\d+/.test(low) || /^king\s+\d+/.test(low)) {
+        rules.kingBones = Number(low.replace(/[^\d]/g, ""));
+        rules.kingOn = true;
+        rules.world = "dogs";
         continue;
       }
       if (/^cones\s+\d+/.test(low)) {

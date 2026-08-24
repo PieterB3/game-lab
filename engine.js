@@ -5,6 +5,13 @@
   var WIDTH = 560;
   var HEIGHT = 380;
   var PLAYER_R = 18;
+  var DOG_COLORS = {
+    golden: "#e8b84a",
+    husky: "#e8eef2",
+    pug: "#d4a574",
+    corgi: "#e0893c",
+    dalmatian: "#f6f3ea"
+  };
 
   function clamp(n, a, b) {
     return Math.max(a, Math.min(b, n));
@@ -169,14 +176,18 @@
       hit: 0,
       won: false,
       lost: false,
-      shot: false
+      shot: false,
+      kingOut: false,
+      clashed: false
     };
+    this.king = null;
     this.player = {
       x: WIDTH * 0.3,
       y: HEIGHT * 0.55,
       speed: 4,
       color: "orange",
       shape: "skater",
+      dog: "",
       r: PLAYER_R
     };
     this.player2 = {
@@ -201,7 +212,13 @@
       bg: "#0b3a32",
       twoPlayer: false,
       winText: "YOU WIN",
-      loseText: "GAME OVER"
+      loseText: "GAME OVER",
+      world: "hockey",
+      roundTime: 0,
+      timeLeft: 0,
+      kingOn: false,
+      kingBones: 0,
+      phase: "hunt"
     };
     var self = this;
     this.player.shoot = function () {
@@ -261,6 +278,29 @@
     this.game.winText = r.winSays;
     this.game.loseText = r.loseSays;
     this.game.twoPlayer = r.twoPlayers;
+    this.game.world = r.world === "dogs" ? "dogs" : "hockey";
+    this.game.roundTime = Number(r.roundTime) || 0;
+    this.game.timeLeft = this.game.roundTime;
+    this.game.kingOn = !!r.kingOn;
+    this.game.kingBones = Number(r.kingBones) || 0;
+    this.game.phase = "hunt";
+    this.king = null;
+    this.player.dog = r.dog || "";
+    if (this.game.world === "dogs") {
+      this.game.bg = "#3d7a45";
+      this.game.puckColor = r.puckColor && r.puckColor !== "black" ? r.puckColor : "#f3e6c0";
+      this.game.winText = r.winSays && r.winSays !== "YOU WIN" ? r.winSays : "YOU WIN";
+      this.player.shape = "dog";
+      if (this.player.dog && (!r.color || r.color === "orange")) {
+        this.player.color = DOG_COLORS[this.player.dog] || "#e8b84a";
+      }
+      this.game.loseText = "KING WINS";
+      this.game.title = r.title && r.title !== "Our Game" ? r.title : "Dog Clash";
+      if (this.game.kingOn && this.game.roundTime < 5) {
+        this.game.roundTime = 20;
+        this.game.timeLeft = 20;
+      }
+    }
   };
 
   Engine.prototype.userFromRules = function (r) {
@@ -275,7 +315,10 @@
         if (r.shoot && self.keys.space) self.player.shoot();
       },
       onCollect: function () {
-        if (r.scoreOnGrab) self.game.score = (Number(self.game.score) || 0) + 1;
+        if (r.scoreOnGrab || r.growOnGrab) self.game.score = (Number(self.game.score) || 0) + 1;
+        if (r.growOnGrab) {
+          self.player.r = Math.min(42, PLAYER_R + self.game.score * 1.3);
+        }
       },
       onHit: function () {
         if (r.hitLosesLife) self.game.lives = (Number(self.game.lives) || 0) - 1;
@@ -406,10 +449,63 @@
     }
 
     this.stepPucks();
-    this.stepEnemies();
-    this.stepShots();
+    if (this.game.world === "dogs") {
+      this.stepDogRound(dt);
+      this.stepKing(dt);
+    } else {
+      this.stepEnemies();
+      this.stepShots();
+    }
     this.stepParticles(dt);
     this.checkEnd();
+  };
+
+  Engine.prototype.stepDogRound = function (dt) {
+    if (this.ended || this.game.phase !== "hunt") return;
+    if (!(this.game.roundTime > 0)) return;
+    this.game.timeLeft = Math.max(0, this.game.timeLeft - dt);
+    if (this.game.timeLeft <= 0) {
+      this.game.timeLeft = 0;
+      this.startClash();
+    }
+  };
+
+  Engine.prototype.startClash = function () {
+    if (this.game.phase === "clash" || this.ended) return;
+    this.game.phase = "clash";
+    this.flags.kingOut = true;
+    if (!this.game.kingOn) {
+      this.emit("king");
+      return;
+    }
+    var kr = Math.min(44, PLAYER_R + this.game.kingBones * 1.3);
+    this.king = {
+      x: WIDTH * 0.78,
+      y: HEIGHT * 0.5,
+      r: kr,
+      dog: "king",
+      color: "#6b4c9a"
+    };
+    this.flash = 0.8;
+    this.audio.play("ok");
+    this.emit("king");
+  };
+
+  Engine.prototype.stepKing = function (dt) {
+    if (!this.king || this.ended) return;
+    var dx = this.player.x - this.king.x;
+    var dy = this.player.y - this.king.y;
+    var mag = Math.sqrt(dx * dx + dy * dy) || 1;
+    this.king.x += (dx / mag) * 1.15;
+    this.king.y += (dy / mag) * 1.15;
+    this.king.x = clamp(this.king.x, this.king.r, WIDTH - this.king.r);
+    this.king.y = clamp(this.king.y, this.king.r + 8, HEIGHT - this.king.r);
+    if (dist(this.player, this.king) < this.player.r + this.king.r - 6) {
+      this.flags.clashed = true;
+      if (Number(this.game.score) > Number(this.game.kingBones)) this.win();
+      else this.lose();
+      this.emit("clash");
+    }
   };
 
   Engine.prototype.stepPucks = function () {
@@ -564,10 +660,15 @@
     ctx.translate(ox, oy);
     this.drawRink(ctx);
     var i;
-    for (i = 0; i < this.pucks.length; i++) this.drawPuck(ctx, this.pucks[i]);
+    for (i = 0; i < this.pucks.length; i++) {
+      if (this.game.world === "dogs") this.drawBone(ctx, this.pucks[i]);
+      else this.drawPuck(ctx, this.pucks[i]);
+    }
     for (i = 0; i < this.enemies.length; i++) this.drawEnemy(ctx, this.enemies[i]);
     for (i = 0; i < this.shots.length; i++) this.drawShot(ctx, this.shots[i]);
-    this.drawActor(ctx, this.player, this.invuln > 0 && Math.floor(this.time * 12) % 2 === 0);
+    if (this.king) this.drawDog(ctx, this.king, true);
+    if (this.game.world === "dogs") this.drawDog(ctx, this.player, false);
+    else this.drawActor(ctx, this.player, this.invuln > 0 && Math.floor(this.time * 12) % 2 === 0);
     if (this.player2.active) this.drawActor(ctx, this.player2, false);
     for (i = 0; i < this.particles.length; i++) this.drawParticle(ctx, this.particles[i]);
     this.drawHud(ctx);
@@ -580,6 +681,10 @@
   };
 
   Engine.prototype.drawRink = function (ctx) {
+    if (this.game.world === "dogs") {
+      this.drawPark(ctx);
+      return;
+    }
     ctx.fillStyle = hexOrName(this.game.bg) || "#0b3a32";
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
     ctx.strokeStyle = "rgba(255,255,255,0.18)";
@@ -606,6 +711,114 @@
     ctx.stroke();
     ctx.fillStyle = "rgba(0,0,0,0.18)";
     ctx.fillRect(14, HEIGHT - 22, WIDTH - 28, 8);
+  };
+
+  Engine.prototype.drawPark = function (ctx) {
+    ctx.fillStyle = hexOrName(this.game.bg) || "#3d7a45";
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    ctx.fillStyle = "rgba(255,255,255,0.05)";
+    var y;
+    for (y = 0; y < HEIGHT; y += 18) ctx.fillRect(0, y, WIDTH, 8);
+    ctx.fillStyle = "rgba(140, 96, 48, 0.28)";
+    ctx.beginPath();
+    ctx.ellipse(WIDTH / 2, HEIGHT / 2 + 10, 190, 110, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(12, 12, WIDTH - 24, HEIGHT - 24, 28);
+    else ctx.rect(12, 12, WIDTH - 24, HEIGHT - 24);
+    ctx.stroke();
+  };
+
+  Engine.prototype.drawBone = function (ctx, p) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(0.45);
+    ctx.fillStyle = hexOrName(this.game.puckColor);
+    ctx.fillRect(-9, -3.5, 18, 7);
+    ctx.beginPath();
+    ctx.arc(-9, -3.5, 4.5, 0, Math.PI * 2);
+    ctx.arc(-9, 3.5, 4.5, 0, Math.PI * 2);
+    ctx.arc(9, -3.5, 4.5, 0, Math.PI * 2);
+    ctx.arc(9, 3.5, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
+  Engine.prototype.drawDog = function (ctx, who, isKing) {
+    var r = Math.max(12, Number(who.r) || PLAYER_R);
+    var dog = String(who.dog || "golden").toLowerCase();
+    var body = hexOrName(who.color || DOG_COLORS.golden);
+    var floppy = dog !== "husky";
+    ctx.save();
+    ctx.translate(who.x, who.y);
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.ellipse(0, r * 0.18, r * 0.78, r * 0.52, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-r * 0.5, r * 0.35, r * 0.28, r * 0.42);
+    ctx.fillRect(r * 0.18, r * 0.35, r * 0.28, r * 0.42);
+    ctx.beginPath();
+    ctx.arc(r * 0.15, -r * 0.38, r * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    ctx.translate(r * 0.15, -r * 0.55);
+    ctx.fillStyle = dog === "husky" ? "#4a5560" : body;
+    if (floppy) {
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.38, r * 0.12, r * 0.22, r * 0.32, -0.5, 0, Math.PI * 2);
+      ctx.ellipse(r * 0.38, r * 0.12, r * 0.22, r * 0.32, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.28, 0);
+      ctx.lineTo(-r * 0.38, -r * 0.48);
+      ctx.lineTo(-r * 0.08, 0);
+      ctx.moveTo(r * 0.28, 0);
+      ctx.lineTo(r * 0.38, -r * 0.48);
+      ctx.lineTo(r * 0.08, 0);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.fillStyle = "#f2d3b0";
+    ctx.beginPath();
+    ctx.ellipse(r * 0.42, -r * 0.28, r * 0.22, r * 0.16, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#1a1208";
+    ctx.beginPath();
+    ctx.arc(r * 0.08, -r * 0.48, r * 0.07, 0, Math.PI * 2);
+    ctx.arc(r * 0.32, -r * 0.48, r * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(r * 0.52, -r * 0.26, r * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = body;
+    ctx.lineWidth = Math.max(3, r * 0.16);
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.7, 0);
+    ctx.quadraticCurveTo(-r * 1.15, -r * 0.35, -r * 0.95, r * 0.2);
+    ctx.stroke();
+    if (dog === "dalmatian") {
+      ctx.fillStyle = "#1a1208";
+      ctx.beginPath();
+      ctx.arc(-r * 0.2, r * 0.05, r * 0.1, 0, Math.PI * 2);
+      ctx.arc(r * 0.25, r * 0.2, r * 0.08, 0, Math.PI * 2);
+      ctx.arc(r * 0.05, -r * 0.15, r * 0.07, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (isKing) {
+      ctx.fillStyle = "#f5d76e";
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.22, -r * 0.72);
+      ctx.lineTo(-r * 0.18, -r * 1.05);
+      ctx.lineTo(0, -r * 0.8);
+      ctx.lineTo(r * 0.18, -r * 1.05);
+      ctx.lineTo(r * 0.42, -r * 0.72);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
   };
 
   Engine.prototype.drawPuck = function (ctx, p) {
@@ -705,6 +918,10 @@
   };
 
   Engine.prototype.drawHud = function (ctx) {
+    if (this.game.world === "dogs") {
+      this.drawDogHud(ctx);
+      return;
+    }
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.fillRect(18, 16, 160, 36);
     ctx.fillRect(WIDTH - 178, 16, 160, 36);
@@ -738,6 +955,28 @@
     ctx.textAlign = "left";
   };
 
+  Engine.prototype.drawDogHud = function (ctx) {
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(16, 12, 150, 36);
+    ctx.fillRect(WIDTH - 166, 12, 150, 36);
+    if (this.game.roundTime > 0) ctx.fillRect(WIDTH / 2 - 54, 12, 108, 36);
+    ctx.fillStyle = "#e8f1ef";
+    ctx.font = "700 14px Nunito, sans-serif";
+    ctx.fillText("BONES  " + (this.game.score || 0), 26, 36);
+    ctx.textAlign = "right";
+    ctx.fillText("KING  " + (this.game.kingOn ? this.game.kingBones : "-"), WIDTH - 26, 36);
+    ctx.textAlign = "center";
+    if (this.game.roundTime > 0) {
+      var t = Math.ceil(this.game.timeLeft);
+      ctx.fillStyle = t <= 5 && this.game.phase === "hunt" ? "#ff6a1a" : "#f5d76e";
+      ctx.fillText(this.game.phase === "clash" ? "CLASH" : "TIME  " + t, WIDTH / 2, 36);
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    ctx.font = "700 12px Nunito, sans-serif";
+    ctx.fillText(this.game.phase === "clash" ? "Run into the king!" : String(this.game.title || "Dog Clash"), WIDTH / 2, HEIGHT - 12);
+    ctx.textAlign = "left";
+  };
+
   Engine.prototype.snapshot = function () {
     return {
       flags: Object.assign({}, this.flags),
@@ -745,8 +984,10 @@
         color: this.player.color,
         speed: this.player.speed,
         shape: this.player.shape,
+        dog: this.player.dog,
         x: this.player.x,
-        y: this.player.y
+        y: this.player.y,
+        r: this.player.r
       },
       game: {
         title: this.game.title,
@@ -759,7 +1000,13 @@
         enemyCount: this.game.enemyCount,
         enemySpeed: this.game.enemySpeed,
         twoPlayer: this.game.twoPlayer,
-        winText: this.game.winText
+        winText: this.game.winText,
+        world: this.game.world,
+        roundTime: this.game.roundTime,
+        timeLeft: this.game.timeLeft,
+        kingBones: this.game.kingBones,
+        kingOn: this.game.kingOn,
+        phase: this.game.phase
       },
       playing: this.playing,
       ended: this.ended
@@ -768,6 +1015,13 @@
 
   Engine.prototype.idleDraw = function () {
     this.resetWorld();
+    if (this.theme === "dogs") {
+      this.game.world = "dogs";
+      this.game.bg = "#3d7a45";
+      this.player.shape = "dog";
+      this.player.dog = "golden";
+      this.player.color = DOG_COLORS.golden;
+    }
     this.draw();
   };
 

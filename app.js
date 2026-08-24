@@ -2,9 +2,14 @@
 (function () {
   "use strict";
 
-  var STORAGE = "dadcamp-gamelab-v2";
+  var HOCKEY_KEY = "dadcamp-gamelab-v2";
+  var DOG_KEY = "dadcamp-dogclash-v1";
+  var TRACK_KEY = "dadcamp-gamelab-track";
+  var track = localStorage.getItem(TRACK_KEY) === "dogs" ? "dogs" : "hockey";
+  var STORAGE = track === "dogs" ? DOG_KEY : HOCKEY_KEY;
   var canvas = document.getElementById("rink");
   var engine = new GameEngine(canvas);
+  engine.theme = track;
   var state = loadState();
   var currentDay = state.day || 1;
   var activeMission = 0;
@@ -35,12 +40,23 @@
     celebrate: document.getElementById("celebrate"),
     helpers: document.getElementById("helpers"),
     palette: document.getElementById("palette"),
-    speedRow: document.getElementById("speedRow")
+    speedRow: document.getElementById("speedRow"),
+    stageTitle: document.getElementById("stageTitle"),
+    controlKeys: document.getElementById("controlKeys"),
+    controlHint: document.getElementById("controlHint"),
+    hockeyTrack: document.getElementById("hockeyTrack"),
+    dogTrack: document.getElementById("dogTrack"),
+    pickHockey: document.getElementById("pickHockey"),
+    pickDogs: document.getElementById("pickDogs")
   };
+
+  function storageKey() {
+    return track === "dogs" ? DOG_KEY : HOCKEY_KEY;
+  }
 
   function loadState() {
     try {
-      return JSON.parse(localStorage.getItem(STORAGE) || "{}");
+      return JSON.parse(localStorage.getItem(storageKey()) || "{}");
     } catch (e) {
       return {};
     }
@@ -51,26 +67,71 @@
     state.code = state.code || {};
     state.code[currentDay] = els.code.value;
     state.done = state.done || {};
-    localStorage.setItem(STORAGE, JSON.stringify(state));
+    localStorage.setItem(storageKey(), JSON.stringify(state));
+    localStorage.setItem(TRACK_KEY, track);
+  }
+
+  function allDays() {
+    return track === "dogs" ? GAME_LAB_DOG_DAYS : GAME_LAB_DAYS;
   }
 
   function daySpec() {
-    return GAME_LAB_DAYS[currentDay - 1];
+    return allDays()[currentDay - 1];
   }
 
   function names() {
     return ((state.name1 || "Pieter") + " + " + (state.name2 || "Cayden"));
   }
 
+  function applyChrome() {
+    document.body.classList.toggle("dog-mode", track === "dogs");
+    engine.theme = track;
+    if (els.stageTitle) els.stageTitle.textContent = track === "dogs" ? "The park" : "The rink";
+    if (els.controlKeys) {
+      els.controlKeys.innerHTML = track === "dogs"
+        ? "Click the park, then use <kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd>"
+        : "Click the rink, then use <kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd>";
+    }
+    if (els.controlHint) {
+      els.controlHint.textContent = track === "dogs"
+        ? "Grow big. When the clock hits 0, clash the king."
+        : "Space shoots · WASD is player 2";
+    }
+    if (els.hockeyTrack) els.hockeyTrack.classList.toggle("active", track === "hockey");
+    if (els.dogTrack) els.dogTrack.classList.toggle("active", track === "dogs");
+  }
+
+  function setTrack(next) {
+    if (next !== "hockey" && next !== "dogs") return;
+    var n1 = (state && state.name1) || (els.name1 && els.name1.value) || "Pieter";
+    var n2 = (state && state.name2) || (els.name2 && els.name2.value) || "Cayden";
+    if (next === track) {
+      applyChrome();
+      return;
+    }
+    saveState();
+    track = next;
+    state = loadState();
+    state.name1 = n1;
+    state.name2 = n2;
+    currentDay = state.day || 1;
+    els.nameLabel.textContent = names();
+    applyChrome();
+    renderPalette();
+    openDay(currentDay);
+  }
+
   function renderPips() {
+    var days = allDays();
     els.dayPips.innerHTML = "";
-    for (var i = 1; i <= 5; i++) {
+    els.dayPips.classList.toggle("hidden", track === "dogs");
+    for (var i = 1; i <= days.length; i++) {
       var b = document.createElement("button");
       b.className = "day-pip";
       b.type = "button";
       b.textContent = String(i);
       if (i === currentDay) b.classList.add("active");
-      var done = (state.done && state.done[i] && state.done[i].length === GAME_LAB_DAYS[i - 1].missions.length);
+      var done = (state.done && state.done[i] && state.done[i].length === days[i - 1].missions.length);
       if (done) b.classList.add("done");
       b.addEventListener("click", (function (d) {
         return function () { openDay(d); };
@@ -135,7 +196,8 @@
     saveState();
     currentDay = d;
     var spec = daySpec();
-    els.dayTitle.textContent = "Day " + d + " · " + spec.title;
+    if (track === "dogs") els.dayTitle.textContent = spec.title;
+    else els.dayTitle.textContent = "Day " + d + " · " + spec.title;
     els.lessonName.textContent = spec.title;
     els.lessonText.textContent = spec.lesson;
     var saved = state.code && state.code[d];
@@ -153,6 +215,7 @@
     updateGutter();
     renderPips();
     renderMissions();
+    applyChrome();
     engine.idleDraw();
     saveState();
   }
@@ -190,7 +253,7 @@
 
   function updateToolUnlock() {
     var n = doneCount();
-    var showSpeed = currentDay > 1 || n >= 1;
+    var showSpeed = n >= 1 && (track === "dogs" || currentDay === 1) || (track === "hockey" && currentDay > 1);
     els.speedRow.classList.toggle("hidden", !showSpeed);
     renderHelpers();
   }
@@ -201,7 +264,7 @@
     els.helpers.innerHTML = "";
     (spec.helpers || []).forEach(function (h) {
       var need = h.after || 0;
-      if (currentDay === 1 && n < need) return;
+      if ((track === "dogs" || currentDay === 1) && n < need) return;
       var b = document.createElement("button");
       b.type = "button";
       b.className = "helper";
@@ -214,6 +277,28 @@
   }
 
   function renderPalette() {
+    els.palette.innerHTML = "";
+    if (track === "dogs") {
+      var dogs = [
+        ["golden", "Golden", "#e8b84a"],
+        ["husky", "Husky", "#e8eef2"],
+        ["pug", "Pug", "#d4a574"],
+        ["corgi", "Corgi", "#e0893c"],
+        ["dalmatian", "Spots", "#f6f3ea"]
+      ];
+      dogs.forEach(function (d) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "dog-swatch";
+        b.textContent = d[1];
+        b.style.background = d[2];
+        b.addEventListener("click", function () {
+          setLine("dog ", "dog " + d[0]);
+        });
+        els.palette.appendChild(b);
+      });
+      return;
+    }
     var colors = [
       ["orange", "#ff6a1a"],
       ["lime", "#7CFF6B"],
@@ -266,7 +351,9 @@
       engine.audio.play("ok");
       var spec = daySpec();
       if (state.done[currentDay].length === spec.missions.length) {
-        els.coach.textContent = "Day " + currentDay + " complete. Free skate, or jump to day " + Math.min(5, currentDay + 1) + ".";
+        els.coach.textContent = track === "dogs"
+          ? "You beat the king! Play again, or Save game and take it home."
+          : "Day " + currentDay + " complete. Free skate, or jump to day " + Math.min(5, currentDay + 1) + ".";
       }
     }
     var spec = daySpec();
@@ -304,7 +391,9 @@
       return;
     }
     canvas.focus();
-    els.coach.textContent = "Playing. Click the rink, then hold the arrows.";
+    els.coach.textContent = track === "dogs"
+      ? "Playing. Click the park, then hold the arrows."
+      : "Playing. Click the rink, then hold the arrows.";
     setTimeout(checkMissions, 80);
   }
 
@@ -317,6 +406,8 @@
   engine.on("shot", function () { checkMissions(); });
   engine.on("run", function () { checkMissions(); });
   engine.on("progress", function () { checkMissions(); });
+  engine.on("king", function () { checkMissions(); });
+  engine.on("clash", function () { checkMissions(); });
 
   els.code.addEventListener("input", function () {
     updateGutter();
@@ -347,7 +438,28 @@
   document.getElementById("faster").addEventListener("click", function () { bumpSpeed(1); });
   document.getElementById("slower").addEventListener("click", function () { bumpSpeed(-1); });
   renderPalette();
+  applyChrome();
 
+  var pickedGame = track;
+  function markGatePick() {
+    if (els.pickHockey) els.pickHockey.classList.toggle("active", pickedGame === "hockey");
+    if (els.pickDogs) els.pickDogs.classList.toggle("active", pickedGame === "dogs");
+  }
+  if (els.pickHockey) {
+    els.pickHockey.addEventListener("click", function () {
+      pickedGame = "hockey";
+      markGatePick();
+    });
+  }
+  if (els.pickDogs) {
+    els.pickDogs.addEventListener("click", function () {
+      pickedGame = "dogs";
+      markGatePick();
+    });
+  }
+  markGatePick();
+  if (els.hockeyTrack) els.hockeyTrack.addEventListener("click", function () { setTrack("hockey"); });
+  if (els.dogTrack) els.dogTrack.addEventListener("click", function () { setTrack("dogs"); });
   els.resetDay.addEventListener("click", function () {
     if (!confirm("Erase today's instructions and start over?")) return;
     if (state.code) delete state.code[currentDay];
@@ -364,7 +476,8 @@
     els.nameLabel.textContent = names();
     els.gate.classList.add("hidden");
     saveState();
-    openDay(currentDay);
+    if (pickedGame !== track) setTrack(pickedGame);
+    else openDay(currentDay);
   });
 
   els.timerBtn.addEventListener("click", function () {
@@ -471,6 +584,7 @@
   if (state.name1) els.name1.value = state.name1;
   if (state.name2) els.name2.value = state.name2;
   els.nameLabel.textContent = names();
+  applyChrome();
   engine.idleDraw();
   renderPips();
 
