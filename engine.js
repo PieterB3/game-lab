@@ -296,7 +296,16 @@
       }
       this.game.loseText = "KING WINS";
       this.game.title = r.title && r.title !== "Our Game" ? r.title : "Dog Clash";
-      if (this.game.kingOn && this.game.roundTime < 5) {
+      if (!this.game.coinCount) this.game.coinCount = 10;
+      if (!r.growOnGrab && !r.scoreOnGrab) {
+        r.growOnGrab = true;
+        r.scoreOnGrab = true;
+      }
+      if (!this.game.kingOn) {
+        this.game.kingOn = true;
+        this.game.kingBones = 3;
+      }
+      if (this.game.roundTime < 5) {
         this.game.roundTime = 20;
         this.game.timeLeft = 20;
       }
@@ -341,6 +350,7 @@
     this.player2.active = !!this.game.twoPlayer;
     this.spawnPucks();
     this.spawnEnemies();
+    if (this.game.world === "dogs") this.spawnKing();
     this.playing = true;
     this.ended = false;
     this.flash = 0.45;
@@ -357,12 +367,17 @@
   };
 
   Engine.prototype.randomPuck = function () {
-    return {
+    var spot = {
       x: rand(50, WIDTH - 50),
       y: rand(50, HEIGHT - 50),
       r: 11,
       pop: 0
     };
+    if (this.king && dist(spot, this.king) < this.king.r + 36) {
+      spot.x = rand(40, WIDTH * 0.55);
+      spot.y = rand(80, HEIGHT - 40);
+    }
+    return spot;
   };
 
   Engine.prototype.spawnEnemies = function () {
@@ -470,34 +485,41 @@
     }
   };
 
+  Engine.prototype.spawnKing = function () {
+    var kr = Math.min(48, 30 + (Number(this.game.kingBones) || 3) * 1.6);
+    this.king = {
+      x: WIDTH * 0.8,
+      y: HEIGHT * 0.36,
+      r: kr,
+      dog: "king",
+      color: "#7a3bb0",
+      awake: false
+    };
+  };
+
   Engine.prototype.startClash = function () {
     if (this.game.phase === "clash" || this.ended) return;
     this.game.phase = "clash";
     this.flags.kingOut = true;
-    if (!this.game.kingOn) {
-      this.emit("king");
-      return;
-    }
-    var kr = Math.min(44, PLAYER_R + this.game.kingBones * 1.3);
-    this.king = {
-      x: WIDTH * 0.78,
-      y: HEIGHT * 0.5,
-      r: kr,
-      dog: "king",
-      color: "#6b4c9a"
-    };
-    this.flash = 0.8;
+    if (!this.king) this.spawnKing();
+    this.king.awake = true;
+    this.shake = 10;
+    this.flash = 1;
     this.audio.play("ok");
     this.emit("king");
   };
 
   Engine.prototype.stepKing = function (dt) {
     if (!this.king || this.ended) return;
+    if (this.game.phase !== "clash") {
+      this.king.y = HEIGHT * 0.36 + Math.sin(this.time * 2.2) * 5;
+      return;
+    }
     var dx = this.player.x - this.king.x;
     var dy = this.player.y - this.king.y;
     var mag = Math.sqrt(dx * dx + dy * dy) || 1;
-    this.king.x += (dx / mag) * 1.15;
-    this.king.y += (dy / mag) * 1.15;
+    this.king.x += (dx / mag) * 1.35;
+    this.king.y += (dy / mag) * 1.35;
     this.king.x = clamp(this.king.x, this.king.r, WIDTH - this.king.r);
     this.king.y = clamp(this.king.y, this.king.r + 8, HEIGHT - this.king.r);
     if (dist(this.player, this.king) < this.player.r + this.king.r - 6) {
@@ -810,13 +832,23 @@
     if (isKing) {
       ctx.fillStyle = "#f5d76e";
       ctx.beginPath();
-      ctx.moveTo(-r * 0.22, -r * 0.72);
-      ctx.lineTo(-r * 0.18, -r * 1.05);
-      ctx.lineTo(0, -r * 0.8);
-      ctx.lineTo(r * 0.18, -r * 1.05);
-      ctx.lineTo(r * 0.42, -r * 0.72);
+      ctx.moveTo(-r * 0.42, -r * 0.7);
+      ctx.lineTo(-r * 0.38, -r * 1.2);
+      ctx.lineTo(-r * 0.08, -r * 0.82);
+      ctx.lineTo(r * 0.18, -r * 1.28);
+      ctx.lineTo(r * 0.42, -r * 0.82);
+      ctx.lineTo(r * 0.62, -r * 1.18);
+      ctx.lineTo(r * 0.7, -r * 0.68);
       ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = "#b8860b";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = "#f5d76e";
+      ctx.font = "800 12px Nunito, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("KING", r * 0.1, -r - 10);
+      ctx.textAlign = "left";
     }
     ctx.restore();
   };
@@ -973,7 +1005,8 @@
     }
     ctx.fillStyle = "rgba(255,255,255,0.75)";
     ctx.font = "700 12px Nunito, sans-serif";
-    ctx.fillText(this.game.phase === "clash" ? "Run into the king!" : String(this.game.title || "Dog Clash"), WIDTH / 2, HEIGHT - 12);
+    if (this.game.phase === "clash") ctx.fillText("CLASH! Run into the king if you are bigger!", WIDTH / 2, HEIGHT - 12);
+    else ctx.fillText("Eat bones. Get bigger than the king. He wakes when time hits 0.", WIDTH / 2, HEIGHT - 12);
     ctx.textAlign = "left";
   };
 
@@ -1021,6 +1054,9 @@
       this.player.shape = "dog";
       this.player.dog = "golden";
       this.player.color = DOG_COLORS.golden;
+      this.game.kingOn = true;
+      this.game.kingBones = 3;
+      this.spawnKing();
     }
     this.draw();
   };

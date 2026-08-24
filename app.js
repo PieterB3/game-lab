@@ -192,6 +192,15 @@
     return "";
   }
 
+  function ensureDogGame(saved, starter) {
+    var text = String(saved || "");
+    if (/king\s+\d+/i.test(text) && /bones\s+\d+/i.test(text) && /time\s+\d+/i.test(text)) return text;
+    var dog = text.match(/^\s*dog\s+\w+/im);
+    var next = String(starter || "");
+    if (dog) next = next.replace(/^\s*dog\s+\w+/im, dog[0].trim());
+    return next;
+  }
+
   function openDay(d, forceStarter) {
     saveState();
     currentDay = d;
@@ -204,7 +213,7 @@
     if (forceStarter) {
       els.code.value = withNames(spec.starter);
     } else if (saved) {
-      els.code.value = saved;
+      els.code.value = track === "dogs" ? withNames(ensureDogGame(saved, spec.starter)) : saved;
     } else if (d > 1 && lastCodeBefore(d)) {
       els.code.value = lastCodeBefore(d).replace(/\s*$/, "") + "\n" + withNames(spec.unlock || "");
     } else {
