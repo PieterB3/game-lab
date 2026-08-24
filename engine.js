@@ -87,6 +87,16 @@
       freq = 600;
       freq2 = 900;
       dur = 0.1;
+    } else if (kind === "king") {
+      type = "sawtooth";
+      freq = 90;
+      freq2 = 220;
+      dur = 0.55;
+    } else if (kind === "clash") {
+      type = "square";
+      freq = 140;
+      freq2 = 420;
+      dur = 0.28;
     }
     osc.type = type;
     osc.frequency.setValueAtTime(freq, now);
@@ -112,6 +122,10 @@
     this.shake = 0;
     this.flash = 0;
     this.time = 0;
+    this.clashTug = 0.5;
+    this.wakeLeft = 0;
+    this.lungeLeft = 0;
+    this.clashPulse = 0;
     this.boundKey = this.onKey.bind(this);
     this.boundFrame = this.frame.bind(this);
     this.resetWorld();
@@ -424,8 +438,9 @@
     }
 
     var prev = { x: this.player.x, y: this.player.y };
+    var locking = this.game.world === "dogs" && this.game.phase === "lock";
     try {
-      if (this.user && typeof this.user.loop === "function") this.user.loop();
+      if (!locking && this.user && typeof this.user.loop === "function") this.user.loop();
     } catch (err) {
       this.stop();
       this.emit("error", this.friendlyError(err));
@@ -453,6 +468,15 @@
     }
     if (moved) this.emit("progress");
 
+    if (this.game.world === "dogs" && this.game.phase === "clash" && this.keys.space) {
+      if (this.keys.right) this.player.x += 2.4;
+      if (this.keys.left) this.player.x -= 2.4;
+      if (this.keys.up) this.player.y -= 2.4;
+      if (this.keys.down) this.player.y += 2.4;
+      this.player.x = clamp(this.player.x, this.player.r, WIDTH - this.player.r);
+      this.player.y = clamp(this.player.y, this.player.r + 8, HEIGHT - this.player.r);
+    }
+
     if (this.player2.active) {
       var s = Number(this.player2.speed) || 4;
       if (this.keys.a) this.player2.x -= s;
@@ -463,7 +487,7 @@
       this.player2.y = clamp(this.player2.y, this.player2.r + 8, HEIGHT - this.player2.r);
     }
 
-    this.stepPucks();
+    if (!(this.game.world === "dogs" && this.game.phase === "lock")) this.stepPucks();
     if (this.game.world === "dogs") {
       this.stepDogRound(dt);
       this.stepKing(dt);
@@ -498,35 +522,110 @@
   };
 
   Engine.prototype.startClash = function () {
-    if (this.game.phase === "clash" || this.ended) return;
-    this.game.phase = "clash";
+    if (this.game.phase === "clash" || this.game.phase === "wake" || this.game.phase === "lock" || this.ended) return;
+    this.game.phase = "wake";
+    this.wakeLeft = 1.15;
     this.flags.kingOut = true;
     if (!this.king) this.spawnKing();
     this.king.awake = true;
-    this.shake = 10;
+    this.shake = 14;
     this.flash = 1;
-    this.audio.play("ok");
+    this.audio.play("king");
+    this.burst(this.king.x, this.king.y, "#f5d76e");
+    this.burst(this.king.x, this.king.y, "#7a3bb0");
     this.emit("king");
+  };
+
+  Engine.prototype.beginLockClash = function () {
+    if (this.game.phase === "lock" || this.ended) return;
+    this.game.phase = "lock";
+    this.flags.clashed = true;
+    var you = Number(this.game.score) || 0;
+    var him = Number(this.game.kingBones) || 3;
+    this.clashTug = clamp(0.5 + (you - him) * 0.07, 0.22, 0.78);
+    this.clashPulse = 0;
+    this.shake = 16;
+    this.flash = 1;
+    this.audio.play("clash");
+    this.emit("clash");
+  };
+
+  Engine.prototype.stepLockClash = function (dt) {
+    this.clashPulse += dt;
+    this.shake = 7 + Math.sin(this.time * 40) * 3;
+    if (this.clashPulse > 0.16) {
+      this.clashPulse = 0;
+      this.audio.play("clash");
+      var mx = (this.player.x + this.king.x) / 2;
+      var my = (this.player.y + this.king.y) / 2;
+      this.burst(mx, my, "#f5d76e");
+      this.burst(mx, my, "#ff6a1a");
+    }
+    var you = Number(this.game.score) || 0;
+    var him = Number(this.game.kingBones) || 3;
+    this.clashTug += (you - him) * 0.16 * dt;
+    var pushing = this.keys.left || this.keys.right || this.keys.up || this.keys.down || this.keys.space;
+    if (pushing) this.clashTug += 0.55 * dt;
+    else this.clashTug -= 0.12 * dt;
+    this.clashTug = clamp(this.clashTug, 0, 1);
+    var midX = (this.player.x + this.king.x) / 2;
+    var midY = (this.player.y + this.king.y) / 2;
+    var jitter = Math.sin(this.time * 50) * 3;
+    this.player.x = midX - 22 + jitter;
+    this.king.x = midX + 22 - jitter;
+    this.player.y = midY + Math.sin(this.time * 30) * 2;
+    this.king.y = midY - Math.sin(this.time * 30) * 2;
+    if (this.clashTug >= 1) {
+      this.explodeDog(this.king, "#7a3bb0");
+      this.win();
+    } else if (this.clashTug <= 0) {
+      this.explodeDog(this.player, this.player.color);
+      this.lose();
+    }
+  };
+
+  Engine.prototype.explodeDog = function (who, color) {
+    if (!who) return;
+    var i;
+    for (i = 0; i < 5; i++) this.burst(who.x, who.y, color || "#f5d76e");
+    this.shake = 18;
+    this.flash = 1;
   };
 
   Engine.prototype.stepKing = function (dt) {
     if (!this.king || this.ended) return;
+    if (this.game.phase === "lock") {
+      this.stepLockClash(dt);
+      return;
+    }
+    if (this.game.phase === "wake") {
+      this.wakeLeft -= dt;
+      this.king.r = Math.min(52, this.king.r + dt * 10);
+      this.king.y = HEIGHT * 0.36 + Math.sin(this.time * 18) * 8;
+      this.shake = Math.max(this.shake, 8);
+      if (this.wakeLeft <= 0) {
+        this.game.phase = "clash";
+        this.lungeLeft = 0.35;
+        this.audio.play("king");
+      }
+      return;
+    }
     if (this.game.phase !== "clash") {
       this.king.y = HEIGHT * 0.36 + Math.sin(this.time * 2.2) * 5;
       return;
     }
+    this.lungeLeft -= dt;
+    if (this.lungeLeft < -1.1) this.lungeLeft = 0.28;
+    var charge = this.lungeLeft > 0 ? 3.1 : 1.45;
     var dx = this.player.x - this.king.x;
     var dy = this.player.y - this.king.y;
     var mag = Math.sqrt(dx * dx + dy * dy) || 1;
-    this.king.x += (dx / mag) * 1.35;
-    this.king.y += (dy / mag) * 1.35;
+    this.king.x += (dx / mag) * charge;
+    this.king.y += (dy / mag) * charge;
     this.king.x = clamp(this.king.x, this.king.r, WIDTH - this.king.r);
     this.king.y = clamp(this.king.y, this.king.r + 8, HEIGHT - this.king.r);
-    if (dist(this.player, this.king) < this.player.r + this.king.r - 6) {
-      this.flags.clashed = true;
-      if (Number(this.game.score) > Number(this.game.kingBones)) this.win();
-      else this.lose();
-      this.emit("clash");
+    if (dist(this.player, this.king) < this.player.r + this.king.r - 4) {
+      this.beginLockClash();
     }
   };
 
@@ -693,6 +792,7 @@
     else this.drawActor(ctx, this.player, this.invuln > 0 && Math.floor(this.time * 12) % 2 === 0);
     if (this.player2.active) this.drawActor(ctx, this.player2, false);
     for (i = 0; i < this.particles.length; i++) this.drawParticle(ctx, this.particles[i]);
+    this.drawClashFX(ctx);
     this.drawHud(ctx);
     if (this.ended) this.drawBanner(ctx);
     ctx.restore();
@@ -949,6 +1049,64 @@
     ctx.globalAlpha = 1;
   };
 
+  Engine.prototype.drawClashFX = function (ctx) {
+    if (this.game.world !== "dogs") return;
+    if (this.game.phase === "wake") {
+      ctx.fillStyle = "rgba(0,0,0," + (0.28 + Math.sin(this.time * 20) * 0.08) + ")";
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#f5d76e";
+      ctx.font = "800 48px Bungee, sans-serif";
+      ctx.fillText("THE KING", WIDTH / 2, HEIGHT / 2 - 8);
+      ctx.fillStyle = "#e8f1ef";
+      ctx.font = "800 16px Nunito, sans-serif";
+      ctx.fillText("He woke up. Get ready to clash!", WIDTH / 2, HEIGHT / 2 + 28);
+      ctx.textAlign = "left";
+      return;
+    }
+    if (this.game.phase !== "lock" || !this.king) return;
+    var mx = (this.player.x + this.king.x) / 2;
+    var my = (this.player.y + this.king.y) / 2;
+    ctx.strokeStyle = "rgba(245, 215, 110, 0.9)";
+    ctx.lineWidth = 3;
+    var ring;
+    for (ring = 0; ring < 3; ring++) {
+      ctx.beginPath();
+      ctx.arc(mx, my, 18 + ring * 16 + (this.time * 80) % 16, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(this.player.x, this.player.y);
+    ctx.lineTo(this.king.x, this.king.y);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(7,21,28,0.55)";
+    ctx.fillRect(70, 56, WIDTH - 140, 54);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ff6a1a";
+    ctx.font = "800 28px Bungee, sans-serif";
+    ctx.fillText("CLASH", WIDTH / 2, 80);
+    var x0 = 90;
+    var barW = WIDTH - 180;
+    ctx.fillStyle = "#7a3bb0";
+    ctx.fillRect(x0, 88, barW, 14);
+    ctx.fillStyle = "#f5d76e";
+    ctx.fillRect(x0, 88, barW * this.clashTug, 14);
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x0, 88, barW, 14);
+    ctx.fillStyle = "#e8f1ef";
+    ctx.font = "800 12px Nunito, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("YOU", x0, 118);
+    ctx.textAlign = "right";
+    ctx.fillText("KING", x0 + barW, 118);
+    ctx.textAlign = "center";
+    ctx.fillText("Hold arrows or SPACE to push!", WIDTH / 2, HEIGHT - 12);
+    ctx.textAlign = "left";
+  };
+
   Engine.prototype.drawHud = function (ctx) {
     if (this.game.world === "dogs") {
       this.drawDogHud(ctx);
@@ -1001,11 +1159,20 @@
     if (this.game.roundTime > 0) {
       var t = Math.ceil(this.game.timeLeft);
       ctx.fillStyle = t <= 5 && this.game.phase === "hunt" ? "#ff6a1a" : "#f5d76e";
-      ctx.fillText(this.game.phase === "clash" ? "CLASH" : "TIME  " + t, WIDTH / 2, 36);
+      var label = "TIME  " + t;
+      if (this.game.phase === "wake") label = "KING!";
+      if (this.game.phase === "clash") label = "HUNT HIM";
+      if (this.game.phase === "lock") label = "PUSH";
+      ctx.fillText(label, WIDTH / 2, 36);
+    }
+    if (this.game.phase === "lock") {
+      ctx.textAlign = "left";
+      return;
     }
     ctx.fillStyle = "rgba(255,255,255,0.75)";
     ctx.font = "700 12px Nunito, sans-serif";
-    if (this.game.phase === "clash") ctx.fillText("CLASH! Run into the king if you are bigger!", WIDTH / 2, HEIGHT - 12);
+    if (this.game.phase === "clash") ctx.fillText("Boost with SPACE. Bump the king to start the clash.", WIDTH / 2, HEIGHT - 12);
+    else if (this.game.phase === "wake") ctx.fillText("The king is waking!", WIDTH / 2, HEIGHT - 12);
     else ctx.fillText("Eat bones. Get bigger than the king. He wakes when time hits 0.", WIDTH / 2, HEIGHT - 12);
     ctx.textAlign = "left";
   };

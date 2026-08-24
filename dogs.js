@@ -50,8 +50,8 @@
         {
           id: "king",
           title: "Beat the king",
-          why: "When the clock hits 0 he wakes up. Run into him only if you are bigger.",
-          hint: "Wait for CLASH, then bump the king.",
+          why: "When the clock hits 0 he wakes. Boost with SPACE, bump him, then mash arrows to push.",
+          hint: "Wait for THE KING. Bump him. Hold arrows to win the clash.",
           showMe: null,
           check: function (code, snap) {
             return snap.flags.won === true;
