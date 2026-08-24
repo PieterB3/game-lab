@@ -40,14 +40,26 @@
         {
           id: "alldir",
           title: "Add directions to go",
-          why: "Add go left, go up, and go down. Then skate.",
-          hint: "Tap the big buttons: Go left, Go up, Go down. PLAY. Use all four arrows.",
+          why: "Add go left, go up, and go down.",
+          hint: "Tap the big buttons: Go left, Go up, Go down. Then PLAY.",
           showMe: "go left\ngo up\ngo down",
           check: function (code, snap) {
             return (
               KidLang.hasLine(code, "go left") &&
               KidLang.hasLine(code, "go up") &&
-              KidLang.hasLine(code, "go down") &&
+              KidLang.hasLine(code, "go down")
+            );
+          }
+        },
+        {
+          id: "arrows",
+          title: "Use arrows",
+          why: "Click the rink, then skate with the arrows.",
+          hint: "Click the rink first. Then hold ← ↑ ↓ → so you go every way.",
+          showMe: null,
+          check: function (code, snap) {
+            return (
+              snap.flags.movedRight &&
               snap.flags.movedLeft &&
               snap.flags.movedUp &&
               snap.flags.movedDown
