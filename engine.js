@@ -5,6 +5,10 @@
   var WIDTH = 560;
   var HEIGHT = 380;
   var PLAYER_R = 18;
+  var FLOOR = HEIGHT - 28;
+  var NET_X = WIDTH / 2;
+  var NET_TOP = HEIGHT - 120;
+  var BALL_SIZES = [22, 17, 13, 10, 8];
   var DOG_COLORS = {
     golden: "#e8b84a",
     husky: "#e8eef2",
@@ -192,9 +196,20 @@
       lost: false,
       shot: false,
       kingOut: false,
-      clashed: false
+      clashed: false,
+      volleyHits: 0,
+      volleyPoints: 0,
+      ballLevel: 0,
+      hardness: 0,
+      smallest: false,
+      scoredHard: false
     };
     this.king = null;
+    this.ball = null;
+    this.rival = null;
+    this.volleyWait = 0;
+    this.hitCool = 0;
+    this.spaceWasDown = false;
     this.player = {
       x: WIDTH * 0.3,
       y: HEIGHT * 0.55,
@@ -202,7 +217,9 @@
       color: "orange",
       shape: "skater",
       dog: "",
-      r: PLAYER_R
+      r: PLAYER_R,
+      vy: 0,
+      onGround: true
     };
     this.player2 = {
       x: WIDTH * 0.7,
@@ -211,7 +228,9 @@
       color: "#5ad0ff",
       shape: "skater",
       r: PLAYER_R,
-      active: false
+      active: false,
+      vy: 0,
+      onGround: true
     };
     this.game = {
       title: "Our Game",
@@ -292,7 +311,7 @@
     this.game.winText = r.winSays;
     this.game.loseText = r.loseSays;
     this.game.twoPlayer = r.twoPlayers;
-    this.game.world = r.world === "dogs" ? "dogs" : "hockey";
+    this.game.world = r.world === "dogs" ? "dogs" : r.world === "volley" ? "volley" : "hockey";
     this.game.roundTime = Number(r.roundTime) || 0;
     this.game.timeLeft = this.game.roundTime;
     this.game.kingOn = !!r.kingOn;
@@ -324,6 +343,21 @@
         this.game.timeLeft = 20;
       }
     }
+    if (this.game.world === "volley") {
+      this.game.bg = "#6ec4e8";
+      this.game.title = r.title && r.title !== "Our Game" ? r.title : "Volley";
+      this.game.winText = r.winSays && r.winSays !== "YOU WIN" ? r.winSays : "POINT GAME";
+      this.game.loseText = "SIDE OUT";
+      this.game.shrinkOnPoint = r.shrinkOnPoint !== false;
+      this.game.hardAfterSmall = r.hardAfterSmall !== false;
+      if (!(Number(r.winAt) < 9000)) this.game.winScore = 7;
+      r.shoot = false;
+      this.player.shape = "volley";
+      this.player.r = 16;
+      this.player.x = WIDTH * 0.28;
+      this.player.y = FLOOR - this.player.r;
+      this.player.vy = 0;
+    }
   };
 
   Engine.prototype.userFromRules = function (r) {
@@ -331,6 +365,11 @@
     return {
       loop: function () {
         var s = Number(self.player.speed) || 4;
+        if (self.game.world === "volley") {
+          if (r.move.right && self.keys.right) self.player.x += s;
+          if (r.move.left && self.keys.left) self.player.x -= s;
+          return;
+        }
         if (r.move.right && self.keys.right) self.player.x += s;
         if (r.move.left && self.keys.left) self.player.x -= s;
         if (r.move.up && self.keys.up) self.player.y -= s;
@@ -362,9 +401,13 @@
     this.applyRules(parsed.rules);
     this.user = this.userFromRules(parsed.rules);
     this.player2.active = !!this.game.twoPlayer;
-    this.spawnPucks();
-    this.spawnEnemies();
-    if (this.game.world === "dogs") this.spawnKing();
+    if (this.game.world === "volley") {
+      this.spawnVolley();
+    } else {
+      this.spawnPucks();
+      this.spawnEnemies();
+      if (this.game.world === "dogs") this.spawnKing();
+    }
     this.playing = true;
     this.ended = false;
     this.flash = 0.45;
@@ -447,8 +490,12 @@
       return;
     }
 
-    this.player.x = clamp(Number(this.player.x) || 0, this.player.r, WIDTH - this.player.r);
-    this.player.y = clamp(Number(this.player.y) || 0, this.player.r + 8, HEIGHT - this.player.r);
+    if (this.game.world === "volley") {
+      this.player.x = clamp(Number(this.player.x) || 0, 30, NET_X - 22);
+    } else {
+      this.player.x = clamp(Number(this.player.x) || 0, this.player.r, WIDTH - this.player.r);
+      this.player.y = clamp(Number(this.player.y) || 0, this.player.r + 8, HEIGHT - this.player.r);
+    }
     var moved = false;
     if (this.player.x > prev.x + 0.2) {
       if (!this.flags.movedRight) moved = true;
@@ -487,8 +534,10 @@
       this.player2.y = clamp(this.player2.y, this.player2.r + 8, HEIGHT - this.player2.r);
     }
 
-    if (!(this.game.world === "dogs" && this.game.phase === "lock")) this.stepPucks();
-    if (this.game.world === "dogs") {
+    if (!(this.game.world === "dogs" && this.game.phase === "lock") && this.game.world !== "volley") this.stepPucks();
+    if (this.game.world === "volley") {
+      this.stepVolley(dt);
+    } else if (this.game.world === "dogs") {
       this.stepDogRound(dt);
       this.stepKing(dt);
     } else {
@@ -497,6 +546,161 @@
     }
     this.stepParticles(dt);
     this.checkEnd();
+  };
+
+  Engine.prototype.spawnVolley = function () {
+    var hard = Number(this.flags.hardness) || 0;
+    var level = Math.min(BALL_SIZES.length - 1, Number(this.flags.ballLevel) || 0);
+    this.rival = {
+      x: WIDTH * 0.72,
+      y: FLOOR - 16,
+      r: 16,
+      vy: 0,
+      onGround: true,
+      color: "#3d6ea8",
+      speed: 2.4 + hard * 0.35
+    };
+    this.player.y = FLOOR - this.player.r;
+    this.player.vy = 0;
+    this.player.onGround = true;
+    this.serveVolley(true);
+  };
+
+  Engine.prototype.serveVolley = function (fromLeft) {
+    var level = Math.min(BALL_SIZES.length - 1, Number(this.flags.ballLevel) || 0);
+    var hard = Number(this.flags.hardness) || 0;
+    var r = BALL_SIZES[level];
+    var x = fromLeft ? WIDTH * 0.26 : WIDTH * 0.74;
+    this.ball = {
+      x: x,
+      y: FLOOR - 78,
+      vx: fromLeft ? 0.55 : -0.55,
+      vy: -6.4,
+      r: r
+    };
+    this.volleyWait = 0.35;
+    this.hitCool = 0;
+    this.spaceWasDown = false;
+  };
+
+  Engine.prototype.stepVolleyBody = function (who, dt, leftSide) {
+    who.vy += 0.42;
+    who.y += who.vy;
+    var floorY = FLOOR - who.r;
+    if (who.y >= floorY) {
+      who.y = floorY;
+      who.vy = 0;
+      who.onGround = true;
+    } else {
+      who.onGround = false;
+    }
+    if (leftSide) who.x = clamp(who.x, 30, NET_X - 22);
+    else who.x = clamp(who.x, NET_X + 22, WIDTH - 30);
+  };
+
+  Engine.prototype.volleyHit = function (who, towardRight) {
+    if (!this.ball || this.hitCool > 0) return false;
+    var reach = who.r + this.ball.r + 16;
+    if (dist(who, this.ball) > reach) return false;
+    var isPlayer = who === this.player;
+    if (isPlayer && !(this.keys.space || who.vy < -0.4)) return false;
+    var hard = Number(this.flags.hardness) || 0;
+    var power = 6.6 + hard * 0.7;
+    var lift = -8.2 - hard * 0.35;
+    this.ball.vx = (towardRight ? 1 : -1) * power + (this.ball.x - who.x) * 0.15;
+    this.ball.vy = lift - Math.max(0, -who.vy) * 0.25;
+    this.hitCool = 0.22;
+    this.flags.volleyHits += 1;
+    this.burst(this.ball.x, this.ball.y, "#fff6a8");
+    this.audio.play("ok");
+    this.shake = Math.max(this.shake, 4);
+    this.emit("hit");
+    this.emit("progress");
+    return true;
+  };
+
+  Engine.prototype.volleyPoint = function (playerScored) {
+    if (playerScored) {
+      this.game.score = (Number(this.game.score) || 0) + 1;
+      this.flags.volleyPoints = this.game.score;
+      if (this.flags.ballLevel < BALL_SIZES.length - 1) {
+        this.flags.ballLevel += 1;
+        if (this.flags.ballLevel >= BALL_SIZES.length - 1) this.flags.smallest = true;
+      } else {
+        this.flags.smallest = true;
+        this.flags.hardness = (Number(this.flags.hardness) || 0) + 1;
+        this.flags.scoredHard = true;
+      }
+      this.audio.play("coin");
+      this.flash = 0.5;
+      this.emit("point");
+      this.emit("collect");
+    } else {
+      this.audio.play("hit");
+      this.shake = 6;
+    }
+    this.serveVolley(playerScored);
+    this.volleyWait = 0.85;
+  };
+
+  Engine.prototype.stepVolley = function (dt) {
+    if (this.ended || !this.ball || !this.rival) return;
+    if (this.hitCool > 0) this.hitCool -= dt;
+    if (this.volleyWait > 0) {
+      this.volleyWait -= dt;
+      this.stepVolleyBody(this.player, dt, true);
+      this.stepVolleyBody(this.rival, dt, false);
+      return;
+    }
+    if (this.player.onGround && this.keys.space && !this.spaceWasDown) {
+      this.player.vy = -8.4;
+      this.player.onGround = false;
+    }
+    this.spaceWasDown = this.keys.space;
+    this.stepVolleyBody(this.player, dt, true);
+    this.volleyHit(this.player, true);
+
+    var b = this.ball;
+    var hard = Number(this.flags.hardness) || 0;
+    var grav = 0.24 + hard * 0.045;
+    b.vy += grav;
+    b.x += b.vx;
+    b.y += b.vy;
+
+    var netHalf = 6;
+    if (Math.abs(b.x - NET_X) < b.r + netHalf && b.y + b.r > NET_TOP) {
+      if (b.x < NET_X) b.x = NET_X - b.r - netHalf;
+      else b.x = NET_X + b.r + netHalf;
+      b.vx *= -0.55;
+      b.vy *= 0.85;
+    }
+    if (b.x < b.r) {
+      b.x = b.r;
+      b.vx = Math.abs(b.vx) * 0.7;
+    }
+    if (b.x > WIDTH - b.r) {
+      b.x = WIDTH - b.r;
+      b.vx = -Math.abs(b.vx) * 0.7;
+    }
+    if (b.y < b.r + 8) {
+      b.y = b.r + 8;
+      b.vy = Math.abs(b.vy) * 0.4;
+    }
+
+    var target = b.x > NET_X ? b.x : WIDTH * 0.74;
+    var spd = this.rival.speed;
+    if (this.rival.x < target - 4) this.rival.x += spd;
+    if (this.rival.x > target + 4) this.rival.x -= spd;
+    if (b.x > NET_X && b.y > NET_TOP - 30 && dist(this.rival, b) < 70 && this.rival.onGround) {
+      this.rival.vy = -7.6;
+      this.rival.onGround = false;
+    }
+    this.stepVolleyBody(this.rival, dt, false);
+    if (b.x > NET_X) this.volleyHit(this.rival, false);
+
+    if (b.y + b.r >= FLOOR) {
+      this.volleyPoint(b.x > NET_X);
+    }
   };
 
   Engine.prototype.stepDogRound = function (dt) {
@@ -738,6 +942,11 @@
   };
 
   Engine.prototype.checkEnd = function () {
+    if (this.game.world === "volley") {
+      var goal = Number(this.game.winScore);
+      if (!this.ended && goal < 9000 && this.game.score >= goal) this.win();
+      return;
+    }
     var winScore = Number(this.game.winScore);
     if (!this.ended && winScore < 9000 && this.game.score >= winScore) {
       this.win();
@@ -779,6 +988,21 @@
     var oy = this.shake ? (Math.random() - 0.5) * this.shake : 0;
     ctx.save();
     ctx.translate(ox, oy);
+    if (this.game.world === "volley") {
+      this.drawCourt(ctx);
+      this.drawVolleyPlayer(ctx, this.player, true);
+      if (this.rival) this.drawVolleyPlayer(ctx, this.rival, false);
+      this.drawVolleyBall(ctx);
+      for (var vi = 0; vi < this.particles.length; vi++) this.drawParticle(ctx, this.particles[vi]);
+      this.drawVolleyHud(ctx);
+      if (this.ended) this.drawBanner(ctx);
+      ctx.restore();
+      if (this.flash > 0) {
+        ctx.fillStyle = "rgba(255, 220, 80," + this.flash * 0.22 + ")";
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      }
+      return;
+    }
     this.drawRink(ctx);
     var i;
     for (i = 0; i < this.pucks.length; i++) {
@@ -803,6 +1027,10 @@
   };
 
   Engine.prototype.drawRink = function (ctx) {
+    if (this.game.world === "volley") {
+      this.drawCourt(ctx);
+      return;
+    }
     if (this.game.world === "dogs") {
       this.drawPark(ctx);
       return;
@@ -833,6 +1061,100 @@
     ctx.stroke();
     ctx.fillStyle = "rgba(0,0,0,0.18)";
     ctx.fillRect(14, HEIGHT - 22, WIDTH - 28, 8);
+  };
+
+  Engine.prototype.drawCourt = function (ctx) {
+    var g = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+    g.addColorStop(0, "#7ec8ea");
+    g.addColorStop(0.55, "#b8dff2");
+    g.addColorStop(0.55, "#e2c48a");
+    g.addColorStop(1, "#c9a46a");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(18, FLOOR - 2, WIDTH - 36, 4);
+    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(24, FLOOR);
+    ctx.lineTo(24, FLOOR - 8);
+    ctx.moveTo(WIDTH - 24, FLOOR);
+    ctx.lineTo(WIDTH - 24, FLOOR - 8);
+    ctx.stroke();
+    ctx.fillStyle = "#d8dce0";
+    ctx.fillRect(NET_X - 3, NET_TOP, 6, FLOOR - NET_TOP);
+    ctx.fillStyle = "#f4f7fa";
+    var gy;
+    for (gy = NET_TOP; gy < FLOOR; gy += 8) {
+      ctx.fillRect(NET_X - 14, gy, 28, 2);
+    }
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(NET_X - 16, NET_TOP - 4, 32, 6);
+    ctx.fillStyle = "#8b5a2b";
+    ctx.fillRect(NET_X - 18, NET_TOP, 6, FLOOR - NET_TOP);
+    ctx.fillRect(NET_X + 12, NET_TOP, 6, FLOOR - NET_TOP);
+  };
+
+  Engine.prototype.drawVolleyPlayer = function (ctx, who, ours) {
+    if (!who) return;
+    ctx.save();
+    ctx.translate(who.x, who.y);
+    ctx.fillStyle = hexOrName(who.color);
+    ctx.fillRect(-12, -6, 24, 22);
+    ctx.fillStyle = "#f2d2b0";
+    ctx.beginPath();
+    ctx.arc(0, -16, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = ours ? "#1a1208" : "#3d2a18";
+    ctx.fillRect(-10, -22, 20, 6);
+    ctx.fillStyle = "#2a3a58";
+    ctx.fillRect(-11, 14, 9, 12);
+    ctx.fillRect(2, 14, 9, 12);
+    ctx.restore();
+  };
+
+  Engine.prototype.drawVolleyBall = function (ctx) {
+    if (!this.ball) return;
+    var b = this.ball;
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.fillStyle = "#f4f1ea";
+    ctx.beginPath();
+    ctx.arc(0, 0, b.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#e24a3c";
+    ctx.lineWidth = Math.max(1.5, b.r * 0.12);
+    ctx.beginPath();
+    ctx.arc(0, 0, b.r * 0.55, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-b.r, 0);
+    ctx.lineTo(b.r, 0);
+    ctx.moveTo(0, -b.r);
+    ctx.lineTo(0, b.r);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  Engine.prototype.drawVolleyHud = function (ctx) {
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(16, 12, 150, 36);
+    ctx.fillRect(WIDTH - 166, 12, 168, 36);
+    ctx.fillRect(WIDTH / 2 - 70, 12, 140, 36);
+    ctx.fillStyle = "#e8f1ef";
+    ctx.font = "700 14px Nunito, sans-serif";
+    ctx.fillText("YOU  " + (this.game.score || 0), 26, 36);
+    ctx.textAlign = "right";
+    var hard = Number(this.flags.hardness) || 0;
+    ctx.fillText(hard > 0 ? "HARD  " + hard : "BALL  " + (5 - (this.flags.ballLevel || 0)), WIDTH - 26, 36);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#f5d76e";
+    ctx.fillText(this.volleyWait > 0.2 ? "POINT" : "VOLLEY", WIDTH / 2, 36);
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.font = "700 12px Nunito, sans-serif";
+    if (hard > 0) ctx.fillText("Smallest ball. Hits are harder now.", WIDTH / 2, HEIGHT - 12);
+    else ctx.fillText("Move under it. SPACE to jump and hit. Score to shrink the ball.", WIDTH / 2, HEIGHT - 12);
+    ctx.textAlign = "left";
   };
 
   Engine.prototype.drawPark = function (ctx) {
@@ -1206,7 +1528,9 @@
         timeLeft: this.game.timeLeft,
         kingBones: this.game.kingBones,
         kingOn: this.game.kingOn,
-        phase: this.game.phase
+        phase: this.game.phase,
+        hardness: this.flags.hardness,
+        ballLevel: this.flags.ballLevel
       },
       playing: this.playing,
       ended: this.ended
@@ -1224,6 +1548,16 @@
       this.game.kingOn = true;
       this.game.kingBones = 3;
       this.spawnKing();
+    }
+    if (this.theme === "volley") {
+      this.game.world = "volley";
+      this.game.bg = "#6ec4e8";
+      this.player.shape = "volley";
+      this.player.color = "#ff6a1a";
+      this.player.r = 16;
+      this.player.x = WIDTH * 0.28;
+      this.flags.ballLevel = 0;
+      this.spawnVolley();
     }
     this.draw();
   };

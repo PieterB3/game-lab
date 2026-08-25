@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Martian+Mono:wght@400;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23ff6a1a' width='32' height='32' rx='6'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="lab.css?v=14" />
+  <link rel="stylesheet" href="lab.css?v=15" />
 </head>
 <body>
   <div class="shell">
@@ -22,6 +22,7 @@
         <div class="track-switch" id="trackSwitch">
           <button class="ghost track-btn active" id="hockeyTrack" type="button">Hockey</button>
           <button class="ghost track-btn" id="dogTrack" type="button">Dogs</button>
+          <button class="ghost track-btn" id="volleyTrack" type="button">Volley</button>
         </div>
         <div class="names" id="nameLabel">Pieter + Cayden</div>
         <div class="timer" id="timer">50:00</div>
@@ -80,10 +81,11 @@
   <div class="overlay" id="gate">
     <div class="modal">
       <h2>Game Lab</h2>
-      <p id="gateBlurb">Pick a game. Write tiny instructions. The park or the rink plays them.</p>
+      <p id="gateBlurb">Pick a game. Write tiny instructions. The court, park, or rink plays them.</p>
       <div class="game-picks">
         <button type="button" class="game-pick" id="pickHockey" data-game="hockey">Hockey rink</button>
         <button type="button" class="game-pick" id="pickDogs" data-game="dogs">Dog Clash</button>
+        <button type="button" class="game-pick" id="pickVolley" data-game="volley">Volley</button>
       </div>
       <div class="fields">
         <div>
@@ -101,10 +103,11 @@
 
   <canvas class="celebrate" id="celebrate"></canvas>
 
-  <script src="kidlang.js?v=14"></script>
-  <script src="engine.js?v=14"></script>
-  <script src="curriculum.js?v=14"></script>
-  <script src="dogs.js?v=14"></script>
-  <script src="app.js?v=14"></script>
+  <script src="kidlang.js?v=15"></script>
+  <script src="engine.js?v=15"></script>
+  <script src="curriculum.js?v=15"></script>
+  <script src="dogs.js?v=15"></script>
+  <script src="volley.js?v=15"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

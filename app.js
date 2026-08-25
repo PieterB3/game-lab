@@ -4,9 +4,11 @@
 
   var HOCKEY_KEY = "dadcamp-gamelab-v2";
   var DOG_KEY = "dadcamp-dogclash-v1";
+  var VOLLEY_KEY = "dadcamp-volley-v1";
   var TRACK_KEY = "dadcamp-gamelab-track";
-  var track = localStorage.getItem(TRACK_KEY) === "dogs" ? "dogs" : "hockey";
-  var STORAGE = track === "dogs" ? DOG_KEY : HOCKEY_KEY;
+  var savedTrack = localStorage.getItem(TRACK_KEY);
+  var track = savedTrack === "dogs" || savedTrack === "volley" ? savedTrack : "hockey";
+  var STORAGE = track === "dogs" ? DOG_KEY : track === "volley" ? VOLLEY_KEY : HOCKEY_KEY;
   var canvas = document.getElementById("rink");
   var engine = new GameEngine(canvas);
   engine.theme = track;
@@ -46,12 +48,16 @@
     controlHint: document.getElementById("controlHint"),
     hockeyTrack: document.getElementById("hockeyTrack"),
     dogTrack: document.getElementById("dogTrack"),
+    volleyTrack: document.getElementById("volleyTrack"),
     pickHockey: document.getElementById("pickHockey"),
-    pickDogs: document.getElementById("pickDogs")
+    pickDogs: document.getElementById("pickDogs"),
+    pickVolley: document.getElementById("pickVolley")
   };
 
   function storageKey() {
-    return track === "dogs" ? DOG_KEY : HOCKEY_KEY;
+    if (track === "dogs") return DOG_KEY;
+    if (track === "volley") return VOLLEY_KEY;
+    return HOCKEY_KEY;
   }
 
   function loadState() {
@@ -72,7 +78,9 @@
   }
 
   function allDays() {
-    return track === "dogs" ? GAME_LAB_DOG_DAYS : GAME_LAB_DAYS;
+    if (track === "dogs") return GAME_LAB_DOG_DAYS;
+    if (track === "volley") return GAME_LAB_VOLLEY_DAYS;
+    return GAME_LAB_DAYS;
   }
 
   function daySpec() {
@@ -85,24 +93,32 @@
 
   function applyChrome() {
     document.body.classList.toggle("dog-mode", track === "dogs");
+    document.body.classList.toggle("volley-mode", track === "volley");
     engine.theme = track;
-    if (els.stageTitle) els.stageTitle.textContent = track === "dogs" ? "The park" : "The rink";
+    if (els.stageTitle) {
+      els.stageTitle.textContent = track === "dogs" ? "The park" : track === "volley" ? "The court" : "The rink";
+    }
     if (els.controlKeys) {
-      els.controlKeys.innerHTML = track === "dogs"
-        ? "Click the park, then use <kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd>"
-        : "Click the rink, then use <kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd>";
+      if (track === "dogs") {
+        els.controlKeys.innerHTML = "Click the park, then use <kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd>";
+      } else if (track === "volley") {
+        els.controlKeys.innerHTML = "Click the court, then use <kbd>←</kbd> <kbd>→</kbd> and <kbd>SPACE</kbd>";
+      } else {
+        els.controlKeys.innerHTML = "Click the rink, then use <kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd>";
+      }
     }
     if (els.controlHint) {
-      els.controlHint.textContent = track === "dogs"
-        ? "Grow big. When the clock hits 0, clash the king."
-        : "Space shoots · WASD is player 2";
+      if (track === "dogs") els.controlHint.textContent = "Grow big. When the clock hits 0, clash the king.";
+      else if (track === "volley") els.controlHint.textContent = "SPACE jumps and hits. Score to shrink the ball.";
+      else els.controlHint.textContent = "Space shoots · WASD is player 2";
     }
     if (els.hockeyTrack) els.hockeyTrack.classList.toggle("active", track === "hockey");
     if (els.dogTrack) els.dogTrack.classList.toggle("active", track === "dogs");
+    if (els.volleyTrack) els.volleyTrack.classList.toggle("active", track === "volley");
   }
 
   function setTrack(next) {
-    if (next !== "hockey" && next !== "dogs") return;
+    if (next !== "hockey" && next !== "dogs" && next !== "volley") return;
     var n1 = (state && state.name1) || (els.name1 && els.name1.value) || "Pieter";
     var n2 = (state && state.name2) || (els.name2 && els.name2.value) || "Cayden";
     if (next === track) {
@@ -124,7 +140,7 @@
   function renderPips() {
     var days = allDays();
     els.dayPips.innerHTML = "";
-    els.dayPips.classList.toggle("hidden", track === "dogs");
+    els.dayPips.classList.toggle("hidden", track === "dogs" || track === "volley");
     for (var i = 1; i <= days.length; i++) {
       var b = document.createElement("button");
       b.className = "day-pip";
@@ -192,6 +208,12 @@
     return "";
   }
 
+  function ensureVolleyGame(saved, starter) {
+    var text = String(saved || "");
+    if (/volley/i.test(text) && /space\s*=\s*hit/i.test(text)) return text;
+    return String(starter || "");
+  }
+
   function ensureDogGame(saved, starter) {
     var text = String(saved || "");
     if (/king\s+\d+/i.test(text) && /bones\s+\d+/i.test(text) && /time\s+\d+/i.test(text)) return text;
@@ -205,7 +227,7 @@
     saveState();
     currentDay = d;
     var spec = daySpec();
-    if (track === "dogs") els.dayTitle.textContent = spec.title;
+    if (track === "dogs" || track === "volley") els.dayTitle.textContent = spec.title;
     else els.dayTitle.textContent = "Day " + d + " · " + spec.title;
     els.lessonName.textContent = spec.title;
     els.lessonText.textContent = spec.lesson;
@@ -213,7 +235,11 @@
     if (forceStarter) {
       els.code.value = withNames(spec.starter);
     } else if (saved) {
-      els.code.value = track === "dogs" ? withNames(ensureDogGame(saved, spec.starter)) : saved;
+      els.code.value = track === "dogs"
+        ? withNames(ensureDogGame(saved, spec.starter))
+        : track === "volley"
+          ? withNames(ensureVolleyGame(saved, spec.starter))
+          : saved;
     } else if (d > 1 && lastCodeBefore(d)) {
       els.code.value = lastCodeBefore(d).replace(/\s*$/, "") + "\n" + withNames(spec.unlock || "");
     } else {
@@ -262,7 +288,7 @@
 
   function updateToolUnlock() {
     var n = doneCount();
-    var showSpeed = n >= 1 && (track === "dogs" || currentDay === 1) || (track === "hockey" && currentDay > 1);
+    var showSpeed = (track === "hockey" && (currentDay > 1 || n >= 1)) || (track !== "hockey" && n >= 1);
     els.speedRow.classList.toggle("hidden", !showSpeed);
     renderHelpers();
   }
@@ -273,7 +299,7 @@
     els.helpers.innerHTML = "";
     (spec.helpers || []).forEach(function (h) {
       var need = h.after || 0;
-      if ((track === "dogs" || currentDay === 1) && n < need) return;
+      if ((track === "dogs" || track === "volley" || currentDay === 1) && n < need) return;
       var b = document.createElement("button");
       b.type = "button";
       b.className = "helper";
@@ -362,7 +388,9 @@
       if (state.done[currentDay].length === spec.missions.length) {
         els.coach.textContent = track === "dogs"
           ? "You beat the king! Play again, or Save game and take it home."
-          : "Day " + currentDay + " complete. Free skate, or jump to day " + Math.min(5, currentDay + 1) + ".";
+          : track === "volley"
+            ? "Point game. Play again, or Save game and take it home."
+            : "Day " + currentDay + " complete. Free skate, or jump to day " + Math.min(5, currentDay + 1) + ".";
       }
     }
     var spec = daySpec();
@@ -400,9 +428,13 @@
       return;
     }
     canvas.focus();
-    els.coach.textContent = track === "dogs"
-      ? "Playing. Click the park, then hold the arrows."
-      : "Playing. Click the rink, then hold the arrows.";
+    if (track === "dogs") {
+      els.coach.textContent = "Playing. Click the park, then hold the arrows.";
+    } else if (track === "volley") {
+      els.coach.textContent = "Playing. Click the court. Arrows move, SPACE hits.";
+    } else {
+      els.coach.textContent = "Playing. Click the rink, then hold the arrows.";
+    }
     setTimeout(checkMissions, 80);
   }
 
@@ -417,6 +449,7 @@
   engine.on("progress", function () { checkMissions(); });
   engine.on("king", function () { checkMissions(); });
   engine.on("clash", function () { checkMissions(); });
+  engine.on("point", function () { checkMissions(); });
 
   els.code.addEventListener("input", function () {
     updateGutter();
@@ -453,6 +486,7 @@
   function markGatePick() {
     if (els.pickHockey) els.pickHockey.classList.toggle("active", pickedGame === "hockey");
     if (els.pickDogs) els.pickDogs.classList.toggle("active", pickedGame === "dogs");
+    if (els.pickVolley) els.pickVolley.classList.toggle("active", pickedGame === "volley");
   }
   if (els.pickHockey) {
     els.pickHockey.addEventListener("click", function () {
@@ -466,9 +500,16 @@
       markGatePick();
     });
   }
+  if (els.pickVolley) {
+    els.pickVolley.addEventListener("click", function () {
+      pickedGame = "volley";
+      markGatePick();
+    });
+  }
   markGatePick();
   if (els.hockeyTrack) els.hockeyTrack.addEventListener("click", function () { setTrack("hockey"); });
   if (els.dogTrack) els.dogTrack.addEventListener("click", function () { setTrack("dogs"); });
+  if (els.volleyTrack) els.volleyTrack.addEventListener("click", function () { setTrack("volley"); });
   els.resetDay.addEventListener("click", function () {
     if (!confirm("Erase today's instructions and start over?")) return;
     if (state.code) delete state.code[currentDay];

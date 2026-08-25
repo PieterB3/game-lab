@@ -127,7 +127,7 @@ body::before {
 
 .game-picks {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -163,6 +163,10 @@ body::before {
 
 body.dog-mode #rink {
   background: #3d7a45;
+}
+
+body.volley-mode #rink {
+  background: #7ec8ea;
 }
 
 .meta {

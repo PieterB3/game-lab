@@ -27,7 +27,10 @@
       growOnGrab: false,
       roundTime: 0,
       kingOn: false,
-      kingBones: 0
+      kingBones: 0,
+      volleyHit: false,
+      shrinkOnPoint: false,
+      hardAfterSmall: false
     };
   }
 
@@ -82,6 +85,10 @@
       if (/^dog\s+/.test(low)) {
         rules.dog = dogName(rest(low, "dog"));
         rules.world = "dogs";
+        continue;
+      }
+      if (low === "volley" || low === "volleyball") {
+        rules.world = "volley";
         continue;
       }
       if (low === "go right" || low === "move right") {
@@ -160,6 +167,21 @@
       }
       if (low === "space = shoot" || low === "shoot") {
         rules.shoot = true;
+        continue;
+      }
+      if (low === "space = hit" || low === "space = jump") {
+        rules.volleyHit = true;
+        rules.world = "volley";
+        continue;
+      }
+      if (low === "point = smaller ball" || low === "points shrink ball") {
+        rules.shrinkOnPoint = true;
+        rules.world = "volley";
+        continue;
+      }
+      if (low === "hard after small" || low === "harder after small") {
+        rules.hardAfterSmall = true;
+        rules.world = "volley";
         continue;
       }
       if (low === "two players") {
