@@ -7,8 +7,13 @@
       day: 1,
       title: "Volley",
       lesson: "Score a point, the ball gets smaller. After the tiniest ball, hits get harder. It does not shrink again.",
-      coach: "Tap PLAY. Move under the ball. SPACE jumps and hits.",
-      starter: "# Volley\nvolley\ncolor orange\nspeed 6\n\ngo left\ngo right\nspace = hit\n\npoint = smaller ball\nhard after small\nwin at 7\n",
+      coach: "Tap PLAY. Slower and Faster change the whole rally. SPACE jumps and hits.",
+      starter: "# Volley\nvolley\ncolor orange\nspeed 3\n\ngo left\ngo right\nspace = hit\n\npoint = smaller ball\nhard after small\nwin at 7\n",
+      unlock: "",
+      helpers: [
+        { label: "Win at 5", line: "win at 5" },
+        { label: "Win at 7", line: "win at 7" }
+      ],
       unlock: "",
       helpers: [
         { label: "Win at 5", line: "win at 5" },

@@ -210,7 +210,10 @@
 
   function ensureVolleyGame(saved, starter) {
     var text = String(saved || "");
-    if (/volley/i.test(text) && /space\s*=\s*hit/i.test(text)) return text;
+    if (/volley/i.test(text) && /space\s*=\s*hit/i.test(text)) {
+      if (/\bspeed 6\b/.test(text)) text = text.replace(/\bspeed 6\b/, "speed 3");
+      return text;
+    }
     return String(starter || "");
   }
 
@@ -288,9 +291,12 @@
 
   function updateToolUnlock() {
     var n = doneCount();
-    var showSpeed = (track === "hockey" && (currentDay > 1 || n >= 1)) || (track !== "hockey" && n >= 1);
+    var showSpeed = false;
+    if (track === "dogs" || track === "volley") showSpeed = true;
+    else showSpeed = currentDay > 1 || n >= 1;
     els.speedRow.classList.toggle("hidden", !showSpeed);
     renderHelpers();
+    updateSpeedLabel();
   }
 
   function renderHelpers() {
@@ -358,13 +364,28 @@
   }
 
   function bumpSpeed(delta) {
-    var n = 4;
+    var n = track === "volley" || track === "dogs" ? 3 : 4;
     els.code.value.split("\n").forEach(function (line) {
       var t = line.replace(/#.*/g, "").trim().toLowerCase();
-      if (/^speed\s+\d+/.test(t)) n = Number(t.replace(/[^\d]/g, "")) || 4;
+      if (/^speed\s+\d+/.test(t)) n = Number(t.replace(/[^\d]/g, "")) || n;
     });
-    n = Math.max(1, Math.min(12, n + delta));
+    n = Math.max(1, Math.min(8, n + delta));
     setLine("speed ", "speed " + n);
+    engine.player.speed = n;
+    if (engine.rules) engine.rules.speed = n;
+    if (engine.game && engine.game.world === "volley" && engine.applyVolleySpeed) engine.applyVolleySpeed();
+    updateSpeedLabel();
+  }
+
+  function updateSpeedLabel() {
+    var label = document.getElementById("speedLabel");
+    if (!label) return;
+    var n = track === "volley" || track === "dogs" ? 3 : 4;
+    els.code.value.split("\n").forEach(function (line) {
+      var t = line.replace(/#.*/g, "").trim().toLowerCase();
+      if (/^speed\s+\d+/.test(t)) n = Number(t.replace(/[^\d]/g, "")) || n;
+    });
+    label.textContent = "Speed " + n;
   }
 
   function firstOpenMission() {

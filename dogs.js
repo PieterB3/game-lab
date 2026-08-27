@@ -8,12 +8,12 @@
       title: "Dog Clash",
       lesson: "Eat bones and grow. The king waits. When time hits 0, clash him if you are bigger.",
       coach: "Tap PLAY. The purple dog with the crown is the king.",
-      starter: "# Dog Clash\ndog golden\nspeed 5\n\ngo right\ngo left\ngo up\ngo down\n\nbones 10\nget bone = grow\n\ntime 20\nking 3\n",
+      starter: "# Dog Clash\ndog golden\nspeed 3\n\ngo right\ngo left\ngo up\ngo down\n\nbones 10\nget bone = grow\n\ntime 40\nking 2\n",
       unlock: "",
       helpers: [
         { label: "More bones", line: "bones 12" },
-        { label: "Harder king", line: "king 6" },
-        { label: "Shorter time", line: "time 12" }
+        { label: "Easier king", line: "king 2" },
+        { label: "More time", line: "time 40" }
       ],
       missions: [
         {

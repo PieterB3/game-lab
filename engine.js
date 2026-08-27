@@ -558,24 +558,38 @@
       vy: 0,
       onGround: true,
       color: "#3d6ea8",
-      speed: 2.4 + hard * 0.35
+      speed: 1.05
     };
     this.player.y = FLOOR - this.player.r;
     this.player.vy = 0;
     this.player.onGround = true;
+    this.applyVolleySpeed();
     this.serveVolley(true);
+  };
+
+  Engine.prototype.volleyPace = function () {
+    var s = Number(this.player.speed);
+    if (!(s > 0)) s = 3;
+    return clamp(0.48 + (s - 1) * 0.09, 0.45, 1.2);
+  };
+
+  Engine.prototype.applyVolleySpeed = function () {
+    if (!this.rival) return;
+    var hard = Number(this.flags.hardness) || 0;
+    this.rival.speed = (1.05 + hard * 0.12) * this.volleyPace();
   };
 
   Engine.prototype.serveVolley = function (fromLeft) {
     var level = Math.min(BALL_SIZES.length - 1, Number(this.flags.ballLevel) || 0);
     var hard = Number(this.flags.hardness) || 0;
     var r = BALL_SIZES[level];
+    var pace = this.volleyPace();
     var x = fromLeft ? WIDTH * 0.26 : WIDTH * 0.74;
     this.ball = {
       x: x,
-      y: FLOOR - 78,
-      vx: fromLeft ? 0.55 : -0.55,
-      vy: -6.4,
+      y: FLOOR - 90,
+      vx: (fromLeft ? 0.28 : -0.28) * pace,
+      vy: -4.6,
       r: r
     };
     this.volleyWait = 0.35;
@@ -584,7 +598,7 @@
   };
 
   Engine.prototype.stepVolleyBody = function (who, dt, leftSide) {
-    who.vy += 0.42;
+    who.vy += 0.28;
     who.y += who.vy;
     var floorY = FLOOR - who.r;
     if (who.y >= floorY) {
@@ -600,15 +614,16 @@
 
   Engine.prototype.volleyHit = function (who, towardRight) {
     if (!this.ball || this.hitCool > 0) return false;
-    var reach = who.r + this.ball.r + 16;
+    var reach = who.r + this.ball.r + 22;
     if (dist(who, this.ball) > reach) return false;
     var isPlayer = who === this.player;
     if (isPlayer && !(this.keys.space || who.vy < -0.4)) return false;
     var hard = Number(this.flags.hardness) || 0;
-    var power = 6.6 + hard * 0.7;
-    var lift = -8.2 - hard * 0.35;
-    this.ball.vx = (towardRight ? 1 : -1) * power + (this.ball.x - who.x) * 0.15;
-    this.ball.vy = lift - Math.max(0, -who.vy) * 0.25;
+    var pace = this.volleyPace();
+    var power = (3.7 + hard * 0.3) * pace;
+    var lift = -5.3 - hard * 0.12;
+    this.ball.vx = (towardRight ? 1 : -1) * power + (this.ball.x - who.x) * 0.1;
+    this.ball.vy = lift - Math.max(0, -who.vy) * 0.12;
     this.hitCool = 0.22;
     this.flags.volleyHits += 1;
     this.burst(this.ball.x, this.ball.y, "#fff6a8");
@@ -630,6 +645,7 @@
         this.flags.smallest = true;
         this.flags.hardness = (Number(this.flags.hardness) || 0) + 1;
         this.flags.scoredHard = true;
+        this.applyVolleySpeed();
       }
       this.audio.play("coin");
       this.flash = 0.5;
@@ -653,7 +669,7 @@
       return;
     }
     if (this.player.onGround && this.keys.space && !this.spaceWasDown) {
-      this.player.vy = -8.4;
+      this.player.vy = -6.4;
       this.player.onGround = false;
     }
     this.spaceWasDown = this.keys.space;
@@ -662,7 +678,8 @@
 
     var b = this.ball;
     var hard = Number(this.flags.hardness) || 0;
-    var grav = 0.24 + hard * 0.045;
+    var pace = this.volleyPace();
+    var grav = 0.12 * pace + hard * 0.018;
     b.vy += grav;
     b.x += b.vx;
     b.y += b.vy;
@@ -689,10 +706,10 @@
 
     var target = b.x > NET_X ? b.x : WIDTH * 0.74;
     var spd = this.rival.speed;
-    if (this.rival.x < target - 4) this.rival.x += spd;
-    if (this.rival.x > target + 4) this.rival.x -= spd;
-    if (b.x > NET_X && b.y > NET_TOP - 30 && dist(this.rival, b) < 70 && this.rival.onGround) {
-      this.rival.vy = -7.6;
+    if (this.rival.x < target - 10) this.rival.x += spd;
+    if (this.rival.x > target + 10) this.rival.x -= spd;
+    if (b.x > NET_X && b.y > NET_TOP - 8 && dist(this.rival, b) < 52 && this.rival.onGround) {
+      this.rival.vy = -5.6;
       this.rival.onGround = false;
     }
     this.stepVolleyBody(this.rival, dt, false);
